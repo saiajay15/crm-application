@@ -1,0 +1,92 @@
+name: 'Deployer'
+
+on:
+  workflow_dispatch:
+    inputs:
+      Env:
+        description: 'Env'     
+        required: true
+        default: 'dev' 
+        type: choice
+        options:
+        - dev
+        - sit
+        - uat 
+        - prod
+      service:
+        description: 'Define Service Name'     
+        required: true
+        default: ''
+        type: list
+      action:
+        description: 'Action to Perform'
+        required: false
+        default: '----------' 
+        type: choice
+        options:
+        - ----------
+        - apply
+        - destroy
+        
+
+jobs:
+  init:
+    name: 'INITIALISE'
+    runs-on: self-hosted
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+      working-directory: envs/${{ github.event.inputs.Env }}/01-infra/${{ github.event.inputs.service }}
+      
+    - name: Terraform Validate
+      run: terraform validate
+      working-directory: envs/${{ github.event.inputs.Env }}/01-infra/${{ github.event.inputs.service }}
+      
+  plan:
+    name: 'PLAN'
+    runs-on: self-hosted
+    needs: init
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+        
+    steps:    
+    - name: Terraform Plan
+      run: terraform plan 
+      working-directory: envs/${{ github.event.inputs.Env }}/01-infra/${{ github.event.inputs.service }}
+      
+  deploy:
+    name: 'DEPLOY ${{ github.event.inputs.service }} on ${{ github.event.inputs.Env }} in shared account'
+    runs-on: self-hosted
+    environment: deploy
+    needs: plan
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:      
+    - name: Terraform Apply
+      if: github.event.inputs.action == 'apply'
+      run: terraform apply -auto-approve 
+      working-directory: envs/${{ github.event.inputs.Env }}/01-infra/${{ github.event.inputs.service }}
+
+    - name: Terraform Destroy
+      if: github.event.inputs.action == 'destroy'
+      run: terraform destroy -auto-approve
+      working-directory: envs/${{ github.event.inputs.Env }}/01-infra/${{ github.event.inputs.service }}
